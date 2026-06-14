@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glove80</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --key:#1f2630; --key2:#262f3b;
+    --line:#323d4d; --txt:#e8edf3; --dim:#5b6675; --accent:#2ea043;
+    --accent2:#3fb950; --badge:#f0883e; --mod:#58a6ff; --layer:#bc8cff;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  html,body{height:100%}
+  body{
+    background:transparent; color:var(--txt); overflow:hidden;
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Helvetica,Arial,sans-serif;
+    -webkit-user-select:none; user-select:none; cursor:default;
+  }
+  /* solid opaque panel behind everything; render() masks holes at &trans keys
+     so only those show the app underneath */
+  #scrim{position:fixed; inset:0; background:var(--bg); z-index:0}
+  #app{display:flex; flex-direction:column; position:fixed; inset:0; padding:8px; z-index:1}
+  /* top bar */
+  #bar{display:flex; align-items:center; gap:8px; flex:0 0 auto; padding:2px 4px 8px}
+  #layers{display:flex; gap:5px; flex-wrap:wrap; flex:1 1 auto}
+  .tab{
+    font-size:12px; padding:4px 9px; border-radius:7px; background:var(--panel);
+    border:1px solid var(--line); color:var(--dim); cursor:pointer; white-space:nowrap;
+    transition:all .08s;
+  }
+  .tab .n{opacity:.55; font-size:10px; margin-right:3px}
+  .tab:hover{color:var(--txt)}
+  .tab.on{background:var(--accent); border-color:var(--accent2); color:#fff}
+  .tab.on .n{opacity:.8}
+  #handbtn{
+    font-size:12px; padding:4px 10px; border-radius:7px; background:var(--panel);
+    border:1px solid var(--line); color:var(--txt); cursor:pointer; white-space:nowrap;
+  }
+  #handbtn b{color:var(--accent2)}
+  /* board */
+  #board{flex:1 1 auto; position:relative; overflow:hidden; min-height:0}
+  #hand{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%)}
+  .key{
+    position:absolute; border-radius:8px; background:var(--key);
+    border:1px solid var(--line); display:flex; flex-direction:column;
+    align-items:center; justify-content:center; overflow:hidden; text-align:center;
+  }
+  .key .main{font-weight:650; line-height:1.02; word-break:break-word}
+  .key .sub{position:absolute; top:2px; right:4px; color:var(--badge); font-weight:700}
+  .key .sub2{position:absolute; bottom:2px; right:4px; color:var(--dim); font-weight:600}
+  .key.kind-mod .main{color:var(--mod)}
+  .key.kind-layer .main{color:var(--layer)}
+  .key.kind-sticky{border-color:var(--accent)}
+  .key.kind-sticky .main{color:var(--accent2)}
+  .key.kind-magic .main{color:var(--accent2)}
+  .key.kind-sys .main{color:var(--badge)}
+  /* &trans -> resolved to the key on the layer underneath, shown faded + dashed */
+  .key.inherited{opacity:0.5; border-style:dashed}
+  /* &none -> blank: a single diagonal slash through the key */
+  .key.kind-none{background:#0f1318; border-color:#1c232c}
+  .key.kind-none .main{color:transparent}
+  .key.kind-none::after{content:''; position:absolute; top:50%; left:-16%;
+    width:132%; height:0; border-top:2px solid #2c3440; transform:rotate(45deg)}
+  .key.kind-raw .main{color:#d4a72c; font-weight:600}
+  /* footer */
+  #foot{flex:0 0 auto; display:flex; align-items:center; gap:14px; padding:6px 4px 2px;
+    font-size:11px; color:var(--dim)}
+  #foot .k{color:var(--txt); background:var(--panel); border:1px solid var(--line);
+    border-radius:4px; padding:1px 5px; font-size:10px}
+  #foot label{cursor:pointer; color:var(--mod)}
+  #file{display:none}
+  #err{color:#f85149}
+</style>
+</head>
+<body>
+<div id="scrim"></div>
+<div id="app">
+  <div id="bar">
+    <div id="layers"></div>
+  </div>
+  <div id="board"><div id="hand"></div></div>
+  <div id="foot">
+    <span><span class="k">k</span> / <span class="k">j</span> prev / next layer</span>
+    <span><span class="k">Esc</span> close</span>
+    <span><label for="file">load keymap…</label></span>
+    <span id="err"></span>
+  </div>
+</div>
+<input type="file" id="file" accept=".json,application/json">
+
+<script>
+"use strict";
+/* ============================================================
+   Embedded keymap (MoErgo Glove80 Layout Editor export subset).
+   Replaced at build time. File-picker can load a fresh export.
+   ============================================================ */
+const KEYMAP_RAW = {"layer_names":["Base","right_1","right_2","right_3","left_1","left_2","left_3","Magic","Factory"],"layers":[[{"value":"&none"},{"value":"&none"},{"value":"&kp","params":[{"value":"C_PREV"}]},{"value":"&kp","params":[{"value":"C_PP"}]},{"value":"&kp","params":[{"value":"C_NEXT"}]},{"value":"&kp","params":[{"value":"C_MUTE"}]},{"value":"&kp","params":[{"value":"C_VOL_DN"}]},{"value":"&kp","params":[{"value":"C_VOL_UP"}]},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&layer_access","params":[{"value":3},{"value":3}]},{"value":"&layer_access","params":[{"value":2},{"value":2}]},{"value":"&layer_access","params":[{"value":1},{"value":1}]},{"value":"&none"},{"value":"&none"},{"value":"&layer_access","params":[{"value":4},{"value":4}]},{"value":"&layer_access","params":[{"value":5},{"value":5}]},{"value":"&layer_access","params":[{"value":6},{"value":6}]},{"value":"&none"},{"value":"&none"},{"value":"&kp","params":[{"value":"TAB"}]},{"value":"&kp","params":[{"value":"Q"}]},{"value":"&kp","params":[{"value":"W"}]},{"value":"&kp","params":[{"value":"E"}]},{"value":"&kp","params":[{"value":"R"}]},{"value":"&kp","params":[{"value":"T"}]},{"value":"&kp","params":[{"value":"Y"}]},{"value":"&kp","params":[{"value":"U"}]},{"value":"&kp","params":[{"value":"I"}]},{"value":"&kp","params":[{"value":"O"}]},{"value":"&kp","params":[{"value":"SQT"}]},{"value":"&kp","params":[{"value":"LS","params":[{"value":"TAB"}]}]},{"value":"&kp","params":[{"value":"ESC"}]},{"value":"&kp","params":[{"value":"A"}]},{"value":"&kp","params":[{"value":"S"}]},{"value":"&kp","params":[{"value":"D"}]},{"value":"&kp","params":[{"value":"F"}]},{"value":"&kp","params":[{"value":"G"}]},{"value":"&kp","params":[{"value":"H"}]},{"value":"&kp","params":[{"value":"J"}]},{"value":"&kp","params":[{"value":"K"}]},{"value":"&kp","params":[{"value":"L"}]},{"value":"&kp","params":[{"value":"P"}]},{"value":"Custom","params":[{"value":"&colon_semi"}]},{"value":"&none"},{"value":"&kp","params":[{"value":"Z"}]},{"value":"&kp","params":[{"value":"X"}]},{"value":"&kp","params":[{"value":"C"}]},{"value":"&kp","params":[{"value":"V"}]},{"value":"&kp","params":[{"value":"B"}]},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&kp","params":[{"value":"N"}]},{"value":"&kp","params":[{"value":"M"}]},{"value":"&kp","params":[{"value":"COMMA"}]},{"value":"&kp","params":[{"value":"DOT"}]},{"value":"&kp","params":[{"value":"FSLH"}]},{"value":"&none"},{"value":"&magic"},{"value":"&none"},{"value":"&kp","params":[{"value":"LALT"}]},{"value":"&sk","params":[{"value":"LSHFT"}]},{"value":"&kp","params":[{"value":"LCTRL"}]},{"value":"&kp","params":[{"value":"BSPC"}]},{"value":"&kp","params":[{"value":"LGUI"}]},{"value":"&none"},{"value":"&none"},{"value":"&kp","params":[{"value":"RET"}]},{"value":"&kp","params":[{"value":"SPACE"}]},{"value":"&kp","params":[{"value":"RCTRL"}]},{"value":"&sk","params":[{"value":"RSHFT"}]},{"value":"&kp","params":[{"value":"RALT"}]},{"value":"&none"},{"value":"&magic"}],[{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&kp","params":[{"value":"LBKT"}]},{"value":"&kp","params":[{"value":"RBKT"}]},{"value":"&kp","params":[{"value":"LS","params":[{"value":"LBKT"}]}]},{"value":"&kp","params":[{"value":"LS","params":[{"value":"RBKT"}]}]},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&kp","params":[{"value":"LS","params":[{"value":"N9"}]}]},{"value":"&kp","params":[{"value":"LS","params":[{"value":"N0"}]}]},{"value":"&kp","params":[{"value":"LS","params":[{"value":"COMMA"}]}]},{"value":"&kp","params":[{"value":"LS","params":[{"value":"DOT"}]}]},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&kp","params":[{"value":"EQUAL"}]},{"value":"&kp","params":[{"value":"LS","params":[{"value":"MINUS"}]}]},{"value":"&kp","params":[{"value":"MINUS"}]},{"value":"&kp","params":[{"value":"LS","params":[{"value":"EQUAL"}]}]},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"}],[{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&kp","params":[{"value":"LS","params":[{"value":"N6"}]}]},{"value":"&kp","params":[{"value":"LS","params":[{"value":"N7"}]}]},{"value":"&kp","params":[{"value":"LS","params":[{"value":"N3"}]}]},{"value":"&kp","params":[{"value":"BSLH"}]},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&kp","params":[{"value":"LS","params":[{"value":"N1"}]}]},{"value":"&kp","params":[{"value":"LS","params":[{"value":"FSLH"}]}]},{"value":"&kp","params":[{"value":"LS","params":[{"value":"N2"}]}]},{"value":"&kp","params":[{"value":"LS","params":[{"value":"N5"}]}]},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&kp","params":[{"value":"GRAVE"}]},{"value":"&kp","params":[{"value":"LS","params":[{"value":"GRAVE"}]}]},{"value":"&kp","params":[{"value":"LS","params":[{"value":"N8"}]}]},{"value":"&kp","params":[{"value":"LS","params":[{"value":"N4"}]}]},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&kp","params":[{"value":"LS","params":[{"value":"BSLH"}]}]},{"value":"&none"},{"value":"&none"},{"value":"&none"}],[{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&kp","params":[{"value":"N7"}]},{"value":"&kp","params":[{"value":"N8"}]},{"value":"&kp","params":[{"value":"N9"}]},{"value":"&none"},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&kp","params":[{"value":"N4"}]},{"value":"&kp","params":[{"value":"N5"}]},{"value":"&kp","params":[{"value":"N6"}]},{"value":"&kp","params":[{"value":"N0"}]},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&kp","params":[{"value":"N1"}]},{"value":"&kp","params":[{"value":"N2"}]},{"value":"&kp","params":[{"value":"N3"}]},{"value":"&none"},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"}],[{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&kp","params":[{"value":"GRAVE"}]},{"value":"&kp","params":[{"value":"LS","params":[{"value":"LC","params":[{"value":"TAB"}]}]}]},{"value":"&kp","params":[{"value":"UP"}]},{"value":"&kp","params":[{"value":"LC","params":[{"value":"TAB"}]}]},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&kp","params":[{"value":"LG","params":[{"value":"LA","params":[{"value":"V"}]}]}]},{"value":"&kp","params":[{"value":"LEFT"}]},{"value":"&kp","params":[{"value":"DOWN"}]},{"value":"&kp","params":[{"value":"RIGHT"}]},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&kp","params":[{"value":"LG","params":[{"value":"LS","params":[{"value":"N4"}]}]}]},{"value":"&kp","params":[{"value":"LG","params":[{"value":"LA","params":[{"value":"LC","params":[{"value":"LEFT"}]}]}]}]},{"value":"&kp","params":[{"value":"LC","params":[{"value":"LA","params":[{"value":"LG","params":[{"value":"DOWN"}]}]}]}]},{"value":"&kp","params":[{"value":"LG","params":[{"value":"LC","params":[{"value":"LA","params":[{"value":"RIGHT"}]}]}]}]},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"}],[{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&kp","params":[{"value":"LS","params":[{"value":"LEFT"}]}]},{"value":"&kp","params":[{"value":"LG","params":[{"value":"LS","params":[{"value":"UP"}]}]}]},{"value":"&kp","params":[{"value":"LS","params":[{"value":"RIGHT"}]}]},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&kp","params":[{"value":"LA","params":[{"value":"BSPC"}]}]},{"value":"&kp","params":[{"value":"LA","params":[{"value":"LS","params":[{"value":"LEFT"}]}]}]},{"value":"&kp","params":[{"value":"LG","params":[{"value":"LS","params":[{"value":"DOWN"}]}]}]},{"value":"&kp","params":[{"value":"LA","params":[{"value":"LS","params":[{"value":"RIGHT"}]}]}]},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&none"},{"value":"&kp","params":[{"value":"LA","params":[{"value":"LEFT"}]}]},{"value":"&none"},{"value":"&kp","params":[{"value":"LA","params":[{"value":"RIGHT"}]}]},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"}],[{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&tmux_zoom"},{"value":"&tmux_split"},{"value":"&tmux_create"},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&tmux_one_two_thirds_toggle"},{"value":"&tmux_prev_window"},{"value":"&tmux_next_split"},{"value":"&tmux_next_window"},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&none"},{"value":"&tmux_move_left"},{"value":"&tmux_rename"},{"value":"&tmux_move_right"},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"},{"value":"&trans"}],[{"value":"&bt","params":[{"value":"BT_CLR"}]},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&bt","params":[{"value":"BT_CLR_ALL"}]},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&rgb_ug","params":[{"value":"RGB_SPI"}]},{"value":"&rgb_ug","params":[{"value":"RGB_SAI"}]},{"value":"&rgb_ug","params":[{"value":"RGB_HUI"}]},{"value":"&rgb_ug","params":[{"value":"RGB_BRI"}]},{"value":"&rgb_ug","params":[{"value":"RGB_TOG"}]},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&bootloader"},{"value":"&rgb_ug","params":[{"value":"RGB_SPD"}]},{"value":"&rgb_ug","params":[{"value":"RGB_SAD"}]},{"value":"&rgb_ug","params":[{"value":"RGB_HUD"}]},{"value":"&rgb_ug","params":[{"value":"RGB_BRD"}]},{"value":"&rgb_ug","params":[{"value":"RGB_EFF"}]},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&bootloader"},{"value":"&reset"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&bt_2"},{"value":"&bt_3"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&reset"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&bt_0"},{"value":"&bt_1"},{"value":"&out","params":[{"value":"OUT_USB"}]},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&none"},{"value":"&to","params":[{"value":8}]}],[{"value":"&kp","params":[{"value":"NUMBER_0"}]},{"value":"&kp","params":[{"value":"NUMBER_6"}]},{"value":"&kp","params":[{"value":"NUMBER_2"}]},{"value":"&kp","params":[{"value":"NUMBER_8"}]},{"value":"&kp","params":[{"value":"NUMBER_4"}]},{"value":"&kp","params":[{"value":"NUMBER_4"}]},{"value":"&kp","params":[{"value":"NUMBER_8"}]},{"value":"&kp","params":[{"value":"NUMBER_2"}]},{"value":"&kp","params":[{"value":"NUMBER_6"}]},{"value":"&kp","params":[{"value":"NUMBER_0"}]},{"value":"&kp","params":[{"value":"NUMBER_1"}]},{"value":"&kp","params":[{"value":"NUMBER_7"}]},{"value":"&kp","params":[{"value":"NUMBER_3"}]},{"value":"&kp","params":[{"value":"NUMBER_9"}]},{"value":"&kp","params":[{"value":"NUMBER_5"}]},{"value":"&kp","params":[{"value":"NUMBER_0"}]},{"value":"&kp","params":[{"value":"NUMBER_0"}]},{"value":"&kp","params":[{"value":"NUMBER_5"}]},{"value":"&kp","params":[{"value":"NUMBER_9"}]},{"value":"&kp","params":[{"value":"NUMBER_3"}]},{"value":"&kp","params":[{"value":"NUMBER_7"}]},{"value":"&kp","params":[{"value":"NUMBER_1"}]},{"value":"&kp","params":[{"value":"NUMBER_2"}]},{"value":"&kp","params":[{"value":"NUMBER_8"}]},{"value":"&kp","params":[{"value":"NUMBER_4"}]},{"value":"&kp","params":[{"value":"NUMBER_0"}]},{"value":"&kp","params":[{"value":"NUMBER_6"}]},{"value":"&kp","params":[{"value":"NUMBER_1"}]},{"value":"&kp","params":[{"value":"NUMBER_1"}]},{"value":"&kp","params":[{"value":"NUMBER_6"}]},{"value":"&kp","params":[{"value":"NUMBER_0"}]},{"value":"&kp","params":[{"value":"NUMBER_4"}]},{"value":"&kp","params":[{"value":"NUMBER_8"}]},{"value":"&kp","params":[{"value":"NUMBER_2"}]},{"value":"&kp","params":[{"value":"NUMBER_3"}]},{"value":"&kp","params":[{"value":"NUMBER_9"}]},{"value":"&kp","params":[{"value":"NUMBER_5"}]},{"value":"&kp","params":[{"value":"NUMBER_1"}]},{"value":"&kp","params":[{"value":"NUMBER_7"}]},{"value":"&kp","params":[{"value":"NUMBER_2"}]},{"value":"&kp","params":[{"value":"NUMBER_2"}]},{"value":"&kp","params":[{"value":"NUMBER_7"}]},{"value":"&kp","params":[{"value":"NUMBER_1"}]},{"value":"&kp","params":[{"value":"NUMBER_5"}]},{"value":"&kp","params":[{"value":"NUMBER_9"}]},{"value":"&kp","params":[{"value":"NUMBER_3"}]},{"value":"&kp","params":[{"value":"NUMBER_4"}]},{"value":"&kp","params":[{"value":"NUMBER_0"}]},{"value":"&kp","params":[{"value":"NUMBER_6"}]},{"value":"&kp","params":[{"value":"NUMBER_2"}]},{"value":"&kp","params":[{"value":"NUMBER_8"}]},{"value":"&kp","params":[{"value":"NUMBER_3"}]},{"value":"&kp","params":[{"value":"NUMBER_4"}]},{"value":"&kp","params":[{"value":"NUMBER_5"}]},{"value":"&kp","params":[{"value":"NUMBER_6"}]},{"value":"&kp","params":[{"value":"NUMBER_6"}]},{"value":"&kp","params":[{"value":"NUMBER_5"}]},{"value":"&kp","params":[{"value":"NUMBER_4"}]},{"value":"&kp","params":[{"value":"NUMBER_3"}]},{"value":"&kp","params":[{"value":"NUMBER_8"}]},{"value":"&kp","params":[{"value":"NUMBER_2"}]},{"value":"&kp","params":[{"value":"NUMBER_6"}]},{"value":"&kp","params":[{"value":"NUMBER_0"}]},{"value":"&kp","params":[{"value":"NUMBER_4"}]},{"value":"&kp","params":[{"value":"NUMBER_5"}]},{"value":"&kp","params":[{"value":"NUMBER_1"}]},{"value":"&kp","params":[{"value":"NUMBER_7"}]},{"value":"&kp","params":[{"value":"NUMBER_3"}]},{"value":"&kp","params":[{"value":"NUMBER_9"}]},{"value":"&kp","params":[{"value":"NUMBER_7"}]},{"value":"&kp","params":[{"value":"NUMBER_8"}]},{"value":"&kp","params":[{"value":"NUMBER_9"}]},{"value":"&kp","params":[{"value":"NUMBER_9"}]},{"value":"&kp","params":[{"value":"NUMBER_8"}]},{"value":"&kp","params":[{"value":"NUMBER_7"}]},{"value":"&kp","params":[{"value":"NUMBER_9"}]},{"value":"&kp","params":[{"value":"NUMBER_3"}]},{"value":"&kp","params":[{"value":"NUMBER_7"}]},{"value":"&kp","params":[{"value":"NUMBER_1"}]},{"value":"&kp","params":[{"value":"NUMBER_5"}]}]],"holdTaps":[{"name":"&right","description":"","bindings":["&mo","&kp"],"tappingTermMs":200,"flavor":"balanced","quickTapMs":175,"requirePriorIdleMs":150,"retroTap":true,"holdTriggerKeyPositions":[59,60,61,42,41,43,62,44,32,31,30,29,76,58,75,77,78,79,63,45,33,21,9,7,20,8,19,18,6,5,17,16,28,40,56,55,72,73,74,57]},{"name":"&left","description":"","bindings":["&mo","&kp"],"tappingTermMs":200,"flavor":"balanced","quickTapMs":175,"requirePriorIdleMs":150,"retroTap":true,"holdTriggerKeyPositions":[54,71,70,53,52,69,68,67,66,65,64,46,47,48,50,49,51,39,38,37,35,34,36,23,22,24,25,26,27,15,14,4,3,13,12,2,10,11,1,0]},{"name":"&rightshift","description":"","bindings":["&kp","&kp"],"tappingTermMs":200,"flavor":"balanced","quickTapMs":175,"requirePriorIdleMs":150,"retroTap":true,"holdTriggerKeyPositions":[59,60,61,42,41,43,62,44,32,31,30,29,76,58,75,77,78,79,63,45,33,21,9,7,20,8,19,18,6,5,17,16,28,40,56,55,72,73,74,57]},{"name":"&leftshift","description":"","bindings":["&kp","&kp"],"tappingTermMs":200,"flavor":"balanced","quickTapMs":175,"requirePriorIdleMs":150,"retroTap":true,"holdTriggerKeyPositions":[54,71,70,53,52,69,68,67,66,65,64,46,47,48,50,49,51,39,38,37,35,34,36,23,22,24,25,26,27,15,14,4,3,13,12,2,10,11,1,0]},{"name":"&layer_access","description":"tap = one-shot layer (next key only); hold = momentary layer while held","bindings":["&mo","&sl"],"tappingTermMs":200,"flavor":"hold-preferred","quickTapMs":0,"requirePriorIdleMs":0,"retroTap":false}],"macros":[{"name":"&tmux_next_window"},{"name":"&tmux_prev_window"},{"name":"&tmux_next_split"},{"name":"&tmux_rename"},{"name":"&tmux_move_right"},{"name":"&tmux_zoom"},{"name":"&tmux_window_1"},{"name":"&tmux_window_0"},{"name":"&tmux_window_2"},{"name":"&tmux_window_3"},{"name":"&tmux_create"},{"name":"&tmux_split"},{"name":"&tmux_move_left"},{"name":"&tmux_one_two_thirds_toggle"}],"title":"Arie Take 24.8 - upper row layers"};
+
+/* ---------- physical layout: 80 firmware positions -> hand grid ----------
+   Verified against the MoErgo layout visualizer for this keymap.
+   col 0..5 = left→right as displayed; row 0..5 = top→bottom.
+   Thumb keys carry explicit {t:i} index into a per-hand arc.            */
+const LAYOUT = (() => {
+  const m = {};
+  const put = (hand, col, row, idx) => { m[idx] = {hand, col, row}; };
+  const thumb = (hand, ti, idx) => { m[idx] = {hand, thumb:ti}; };
+  // LEFT finger columns
+  const L = [
+    [0,10,22,34,46,64],   // col0 (outer pinky)
+    [1,11,23,35,47,65],   // col1
+    [2,12,24,36,48,66],   // col2
+    [3,13,25,37,49,67],   // col3
+    [4,14,26,38,50,68],   // col4
+    [null,21,27,39,51,null], // col5 (inner index): (blank) T G B
+  ];
+  L.forEach((colArr,c)=>colArr.forEach((idx,r)=>{ if(idx!==null) put('L',c,r,idx); }));
+  // thumb cluster: 6 keys -> top row [0,1,2], bottom row [3,4,5]
+  [20,52,53,69,70,71].forEach((idx,ti)=>thumb('L',ti,idx)); // bottom: 69=BSPC 70=LGUI
+  // RIGHT finger columns
+  const R = [
+    [null,56,28,40,58,null], // col0 (inner index): (blank) Y H N
+    [5,17,29,41,59,75],
+    [6,18,30,42,60,76],
+    [7,19,31,43,61,77],
+    [8,16,32,44,62,78],
+    [9,15,33,45,63,79],        // col5 (outer pinky)
+  ];
+  R.forEach((colArr,c)=>colArr.forEach((idx,r)=>{ if(idx!==null) put('R',c,r,idx); }));
+  [57,54,55,72,73,74].forEach((idx,ti)=>thumb('R',ti,idx)); // bottom: 73=RET 74=SPACE
+  return m;
+})();
+// per-column vertical stagger (key units, +down). Main finger block stays flat
+// (aligned rows, like the Glove80 / MoErgo view); only the pinky columns drop.
+// L cols: [pinky-outer, pinky, ring, middle, index, inner-index]; R is mirrored.
+const STAGGER = { L:[0.5,0.5,0.0,0.0,0.0,0.0], R:[0.0,0.0,0.0,0.0,0.5,0.5] };
+
+/* ---------- ZMK keycode -> label/glyph maps ---------- */
+const MOD = {
+  LGUI:'⌘', RGUI:'⌘', LG:'⌘', RG:'⌘', LCMD:'⌘', RCMD:'⌘',
+  LALT:'⌥', RALT:'⌥', LA:'⌥', RA:'⌥', LOPT:'⌥', ROPT:'⌥',
+  LCTRL:'⌃', RCTRL:'⌃', LCTL:'⌃', RCTL:'⌃', LC:'⌃', RC:'⌃',
+  LSHFT:'⇧', RSHFT:'⇧', LSHIFT:'⇧', RSHIFT:'⇧', LS:'⇧', RS:'⇧',
+};
+const SHIFTED = {
+  N1:'!',N2:'@',N3:'#',N4:'$',N5:'%',N6:'^',N7:'&',N8:'*',N9:'(',N0:')',
+  NUMBER_1:'!',NUMBER_2:'@',NUMBER_3:'#',NUMBER_4:'$',NUMBER_5:'%',
+  NUMBER_6:'^',NUMBER_7:'&',NUMBER_8:'*',NUMBER_9:'(',NUMBER_0:')',
+  MINUS:'_',EQUAL:'+',LBKT:'{',RBKT:'}',BSLH:'|',NON_US_BSLH:'|',
+  SEMI:':',SQT:'"',GRAVE:'~',COMMA:'<',DOT:'>',FSLH:'?',SLASH:'?',
+};
+const KP = {
+  // letters render as themselves (handled in glyph())
+  N0:'0',N1:'1',N2:'2',N3:'3',N4:'4',N5:'5',N6:'6',N7:'7',N8:'8',N9:'9',
+  NUMBER_0:'0',NUMBER_1:'1',NUMBER_2:'2',NUMBER_3:'3',NUMBER_4:'4',
+  NUMBER_5:'5',NUMBER_6:'6',NUMBER_7:'7',NUMBER_8:'8',NUMBER_9:'9',
+  MINUS:'-',EQUAL:'=',LBKT:'[',RBKT:']',BSLH:'\\',NON_US_BSLH:'\\',
+  SEMI:';',SQT:'’',GRAVE:'`',COMMA:',',DOT:'.',FSLH:'/',SLASH:'/',
+  SPACE:'␣',TAB:'⇥',RET:'⏎',RETURN:'⏎',ENTER:'⏎',
+  ESC:'esc',ESCAPE:'esc',BSPC:'⌫',BACKSPACE:'⌫',DEL:'⌦',DELETE:'⌦',
+  CAPS:'⇪',CLCK:'⇪',CAPSLOCK:'⇪',
+  LEFT:'←',RIGHT:'→',UP:'↑',DOWN:'↓',
+  HOME:'⇱',END:'⇲',PG_UP:'⇞',PG_DN:'⇟',PGUP:'⇞',PGDN:'⇟',
+  INS:'ins',INSERT:'ins',PSCRN:'prtsc',
+  // media / consumer
+  C_PREV:'⏮',C_NEXT:'⏭',C_PP:'⏯',C_PLAY_PAUSE:'⏯',
+  C_MUTE:'🔇',C_VOL_UP:'🔊',C_VOL_DN:'🔉',
+  C_VOLUME_UP:'🔊',C_VOLUME_DOWN:'🔉',
+  C_BRI_UP:'☀︎+',C_BRI_DN:'☀︎-',
+  K_MUTE:'🔇',K_VOL_UP:'🔊',K_VOL_DN:'🔉',
+  // keypad
+  KP_N0:'0',KP_N1:'1',KP_N2:'2',KP_N3:'3',KP_N4:'4',KP_N5:'5',KP_N6:'6',
+  KP_N7:'7',KP_N8:'8',KP_N9:'9',KP_PLUS:'+',KP_MINUS:'-',KP_MULTIPLY:'*',
+  KP_DIVIDE:'/',KP_DOT:'.',KP_ENTER:'⏎',
+};
+for(let i=1;i<=24;i++) KP['F'+i]='F'+i;
+
+function glyph(code){
+  if(code==null) return '';
+  code = String(code);
+  if(/^[A-Z]$/.test(code)) return code;          // letters
+  if(KP[code]!==undefined) return KP[code];
+  if(MOD[code]!==undefined) return MOD[code];
+  return code;                                     // unknown -> raw token
+}
+
+// format a &kp parameter, which may be a modifier-function nest e.g. LS(N4)
+function fmtParam(p){
+  if(p && p.params && p.params.length){
+    const fn = p.value, inner = p.params[0];
+    const innerCode = inner && inner.params && inner.params.length ? null : (inner ? inner.value : null);
+    // single shift over a key with a defined shifted symbol -> show that symbol
+    if((fn==='LS'||fn==='RS'||fn==='LSHFT'||fn==='RSHFT') && innerCode && SHIFTED[innerCode]!==undefined){
+      return SHIFTED[innerCode];
+    }
+    const mg = MOD[fn]!==undefined ? MOD[fn] : fn+'+';
+    return mg + fmtParam(inner);
+  }
+  return glyph(p ? p.value : '');
+}
+
+/* ---------- known custom-behavior labels ---------- */
+const CUSTOM = {
+  '&colon_semi': {main:':', sub2:';', kind:'custom'},
+  '&magic':      {main:'Magic', kind:'magic'},
+};
+function macroLabel(name){
+  return String(name).replace(/^&/,'').replace(/^tmux_/,'tmux ').replace(/_/g,' ');
+}
+
+/* ---------- behavior -> display object {main, sub, sub2, kind} ---------- */
+function decode(b, ctx){
+  if(!b) return {main:'', kind:'none'};
+  const v = b.value, P = b.params || [];
+  const p0 = P[0] ? P[0].value : null;
+  switch(v){
+    case '&none':  return {main:'', kind:'none'};
+    case '&trans': return {main:'▽', kind:'trans'};
+    case '&kp':    return {main:fmtParam(P[0]), kind:'normal'};
+    case '&mt':    return {main:fmtParam(P[1]), sub:MOD[p0]||glyph(p0), kind:'mod'};
+    case '&lt':    return {main:fmtParam(P[1]), sub:'L'+p0, kind:'layer'};
+    case '&mo':    return {main:'L'+p0, sub2:'hold', kind:'layer'};
+    case '&to':    return {main:'→L'+p0, kind:'layer'};
+    case '&tog':   return {main:'⇄L'+p0, kind:'layer'};
+    case '&sl':    return {main:'L'+p0, sub2:'sticky', kind:'sticky'};
+    case '&sk':    return {main:MOD[p0]||glyph(p0), sub2:'sticky', kind:'sticky'};
+    case '&magic': return {main:'Magic', kind:'magic'};
+    case '&layer_access': { // custom: mo(p0)/sl(p1)
+      const hold=p0, stick=P[1]?P[1].value:p0;
+      return {main:'L'+hold, sub2:(hold===stick?'hold·stick':'hold '+hold), kind:'layer'};
+    }
+    case '&to_layer': return {main:'→L'+p0, kind:'layer'};
+    case '&bt':    return {main:'BT', sub2:String(p0||'').replace('BT_','').replace('SEL','sel ').replace('CLR_ALL','clr*').replace('CLR','clr').toLowerCase(), kind:'sys'};
+    case '&out':   return {main:String(p0||'').replace('OUT_',''), sub2:'out', kind:'sys'};
+    case '&rgb_ug':return {main:'RGB', sub2:String(p0||'').replace('RGB_','').toLowerCase(), kind:'sys'};
+    case '&reset': return {main:'Reset', kind:'sys'};
+    case '&sys_reset': return {main:'Reset', kind:'sys'};
+    case '&bootloader': return {main:'Boot', kind:'sys'};
+    case 'Custom': {
+      const ref = p0;
+      if(CUSTOM[ref]) return Object.assign({kind:'custom'}, CUSTOM[ref]);
+      if(ctx.macros.has(ref)) return {main:macroLabel(ref), kind:'sys'};
+      return {main:String(ref||'').replace(/^&/,''), kind:'custom'};
+    }
+  }
+  // bluetooth profile shims like &bt_0 / &bt_1 (custom)
+  let mm = v.match(/^&bt_(\d+)$/);
+  if(mm) return {main:'BT', sub2:mm[1], kind:'sys'};
+  // macros referenced directly
+  if(ctx.macros.has(v)) return {main:macroLabel(v), kind:'sys'};
+  // custom hold-taps defined in holdTaps (e.g. &right = mo/kp)
+  if(ctx.holdTaps[v]){
+    const bnd = ctx.holdTaps[v];
+    const hold = decode({value:bnd[0], params:[P[0]]}, ctx);
+    const tap  = decode({value:bnd[1], params:[P[1]]}, ctx);
+    return {main:tap.main, sub:hold.sub||hold.main, kind:tap.kind};
+  }
+  // unknown -> raw token, never crash
+  return {main:v.replace(/^&/,''), kind:'raw'};
+}
+
+/* ---------- state + parsing ---------- */
+let DATA=null, layerIdx=0;
+function buildCtx(km){
+  const macros = new Set((km.macros||[]).map(m=>m.name));
+  const holdTaps = {};
+  (km.holdTaps||[]).forEach(h=>{ if(h.name && h.bindings) holdTaps[h.name]=h.bindings; });
+  return {macros, holdTaps};
+}
+function load(km){
+  if(!km || !km.layers || !km.layer_names) throw new Error('not a Glove80 layout export');
+  const ctx = buildCtx(km);
+  DATA = {
+    names: km.layer_names,
+    layers: km.layers.map(layer => layer.map(b => decode(b, ctx))),
+  };
+  if(layerIdx>=DATA.names.length) layerIdx=0;
+}
+
+/* ---------- rendering ---------- */
+const U = 1.06;      // key pitch in units
+const HANDW = 6;     // finger columns per hand
+const GAP = 1.8;     // gap between the two halves (units)
+function render(){
+  renderTabs();
+  const host = document.getElementById('hand');
+  host.innerHTML='';
+  const layer = DATA.layers[layerIdx];
+
+  // full board spans both hands + center gap; rows 0..5 + a 2-row thumb cluster
+  const totalUnitsW = HANDW*2 + GAP + 0.4;
+  const totalUnitsH = 6 + 2.9;
+
+  // fit unit to board — fall back to the window if flex hasn't measured yet
+  const board=document.getElementById('board');
+  let bw=board.clientWidth, bh=board.clientHeight;
+  if(bw<60||bh<60){ bw=window.innerWidth-16; bh=window.innerHeight-92; } // bar+foot
+  bw-=8; bh-=8;
+  const unit = Math.max(20, Math.min(bw/totalUnitsW/U, bh/totalUnitsH/U));
+  const ks = unit;
+  host.style.width = (totalUnitsW*U*unit)+'px';
+  host.style.height= (totalUnitsH*U*unit)+'px';
+
+  const place=(el,xUnits,yUnits,rot)=>{
+    el.style.width=ks+'px'; el.style.height=ks+'px';
+    el.style.left=(xUnits*U*unit)+'px'; el.style.top=(yUnits*U*unit)+'px';
+    if(rot) el.style.transform='rotate('+rot+'deg)';
+  };
+  const mkKey=(d, inherited)=>{
+    const el=document.createElement('div');
+    el.className='key kind-'+(d.kind||'normal')+(inherited?' inherited':'');
+    const main=document.createElement('div'); main.className='main';
+    main.style.fontSize=Math.round(ks*(d.main && d.main.length>3?0.26:0.42))+'px';
+    main.textContent=d.main||''; el.appendChild(main);
+    if(d.sub){ const s=document.createElement('div'); s.className='sub';
+      s.style.fontSize=Math.round(ks*0.26)+'px'; s.textContent=d.sub; el.appendChild(s); }
+    if(d.sub2){ const s=document.createElement('div'); s.className='sub2';
+      s.style.fontSize=Math.round(ks*0.2)+'px'; s.textContent=d.sub2; el.appendChild(s); }
+    return el;
+  };
+
+  // &trans shows what's underneath: resolve to the base layer's key, shown faded.
+  const base=DATA.layers[0];
+  const resolve=(i)=>{
+    const d=layer[i];
+    if(d.kind!=='trans') return {d, inherited:false};
+    const u=base[i];
+    if(!u || u.kind==='trans' || u.kind==='none') return {d:{main:'',kind:'none'}, inherited:false};
+    return {d:u, inherited:true};
+  };
+
+  const drawHand=(h, xOff)=>{
+    const stag=STAGGER[h];
+    const thumbs=[];
+    for(let i=0;i<layer.length;i++){
+      const pos=LAYOUT[i]; if(!pos || pos.hand!==h) continue;
+      if(pos.thumb!==undefined){ thumbs.push({i, t:pos.thumb}); continue; }
+      const rk=resolve(i);
+      const el=mkKey(rk.d, rk.inherited);
+      place(el, xOff+pos.col, pos.row+stag[pos.col], 0);
+      host.appendChild(el);
+    }
+    // thumb cluster — two rows of three, fanned toward board center
+    thumbs.sort((a,b)=>a.t-b.t);
+    const inner = (h==='L');                              // L thumb on the right of its block
+    const clusterCol = xOff + (inner ? (HANDW-1.3) : 1.3);
+    const baseY = 6.35;
+    const rot = inner ? 18 : -18;
+    const rad=rot*Math.PI/180, cs=Math.cos(rad), sn=Math.sin(rad);
+    thumbs.forEach((k,ix)=>{
+      const tr=Math.floor(ix/3), tc=ix%3;                // 3 across, 2 down
+      const lx=(tc-1)*U, ly=tr*U;
+      const rx=lx*cs - ly*sn, ry=lx*sn + ly*cs;
+      const rk=resolve(k.i);
+      const el=mkKey(rk.d, rk.inherited);
+      place(el, clusterCol+rx, baseY+ry, rot);
+      host.appendChild(el);
+    });
+  };
+  drawHand('L', 0);
+  drawHand('R', HANDW + GAP);
+}
+
+function renderTabs(){
+  const box=document.getElementById('layers'); box.innerHTML='';
+  DATA.names.forEach((nm,i)=>{
+    const t=document.createElement('div');
+    t.className='tab'+(i===layerIdx?' on':'');
+    t.innerHTML='<span class="n">'+(i+1)+'</span>'+nm;
+    t.onclick=()=>{ layerIdx=i; render(); };
+    box.appendChild(t);
+  });
+}
+
+/* ---------- input ---------- */
+const N = () => DATA.names.length;
+window.addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();
+  if(k==='j'||k==='l'){ layerIdx=(layerIdx+1)%N(); render(); e.preventDefault(); return; }   // next
+  if(k==='k'||k==='h'){ layerIdx=(layerIdx-1+N())%N(); render(); e.preventDefault(); return; } // prev
+});
+window.addEventListener('resize',()=>{ if(DATA) render(); });
+
+document.getElementById('file').addEventListener('change',ev=>{
+  const f=ev.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{ try{ load(JSON.parse(r.result)); layerIdx=0; render();
+      document.getElementById('err').textContent='';
+    }catch(err){ document.getElementById('err').textContent='load failed: '+err.message; } };
+  r.readAsText(f);
+});
+
+/* ---------- boot ---------- */
+window.onerror=function(msg,url,line){
+  const e=document.getElementById('err');
+  if(e) e.textContent='JS error: '+msg+' @'+line;
+  window.__g80err=msg+' @'+line;
+};
+window.__g80status=function(){
+  const b=document.getElementById('board');
+  return JSON.stringify({keys:document.querySelectorAll('.key').length,
+    tabs:document.querySelectorAll('.tab').length,
+    bw:b?b.clientWidth:-1, bh:b?b.clientHeight:-1,
+    iw:window.innerWidth, ih:window.innerHeight,
+    err:window.__g80err||''});
+};
+function boot(){ try{ load(KEYMAP_RAW); render(); }
+  catch(err){ const e=document.getElementById('err'); if(e) e.textContent='parse error: '+err.message; window.__g80err=err.message; } }
+boot();
+// re-render after WebKit settles layout (board height can be 0 on first paint)
+requestAnimationFrame(()=>{ if(DATA) render(); });
+window.addEventListener('load',()=>{ if(DATA) render(); });
+</script>
+</body>
+</html>
