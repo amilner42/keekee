@@ -4,6 +4,8 @@ Press a hotkey from any app → an always-on-top HUD of your **MoErgo Glove80** 
 (both halves, every layer) pops up. Press again or **Esc** to dismiss. Offline, no
 dock icon. Built on Hammerspoon + a single self-contained HTML file.
 
+![demo](demo.gif)
+
 ## Setup
 
 1. Install Hammerspoon and grant it Accessibility:
