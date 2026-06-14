@@ -1,93 +1,47 @@
 # keekee — Glove80 keymap overlay for macOS
 
-A glanceable, always-on-top HUD of your **MoErgo Glove80** keymap. Press a global
-hotkey from any app → both keyboard halves pop up; flip through layers from the home
-row; press the hotkey again or **Esc** to dismiss.
+Press a hotkey from any app → an always-on-top HUD of your **MoErgo Glove80** keymap
+(both halves, every layer) pops up. Press again or **Esc** to dismiss. Offline, no
+dock icon. Built on Hammerspoon + a single self-contained HTML file.
 
-No browser tab, no dock icon, fully offline. Hammerspoon binds the hotkey and loads a
-self-contained local HTML file's contents into a non-activating `hs.webview`.
+## Setup
 
-## What's here
-| file | purpose |
-|------|---------|
-| `glove80.html` | self-contained viewer (inline CSS/JS, **your keymap embedded**) |
-| `init.snippet.lua` | the Hammerspoon hotkey config |
-| `README.md` | this file |
-
-The deployed copies live at `~/.hammerspoon/glove80.html` and `~/.hammerspoon/init.lua`.
-
-## Install (one time)
-
-1. **Install Hammerspoon**
+1. Install Hammerspoon and grant it Accessibility:
    ```sh
    brew install --cask hammerspoon
    ```
-   Then launch **Hammerspoon** (Applications). A hammer icon appears in the menu bar.
+   Launch it → grant **System Settings → Privacy & Security → Accessibility → Hammerspoon**.
 
-2. **Grant Accessibility permission**
-   On first launch macOS prompts for it. Otherwise:
-   *System Settings → Privacy & Security → Accessibility → enable **Hammerspoon***.
-   (Needed so the global hotkey + Esc work from any app.)
+2. Embed your keymap. Export your layout JSON from **my.glove80.com** (Layout Editor),
+   then:
+   ```sh
+   python3 build.py /path/to/your-export.json   # or no arg = newest *.json in ~/Downloads
+   ```
 
-3. **Files are already in place** (`~/.hammerspoon/glove80.html` and `init.lua`).
-   In the menu-bar hammer icon → **Reload Config**.
+3. Install the files:
+   ```sh
+   cp glove80.html ~/.hammerspoon/glove80.html
+   cat init.snippet.lua >> ~/.hammerspoon/init.lua   # appends; won't clobber existing config
+   ```
 
-That's it. Press **⌘⌥⌃K** from any app.
+4. Hammerspoon menu-bar icon → **Reload Config**.
 
-> If you ever re-run the deploy from this repo: it copies `glove80.html` to
-> `~/.hammerspoon/` and **appends** the snippet to `init.lua` only if not already there
-> (it never clobbers an existing config).
+## Use
 
-## Using it
+| | |
+|---|---|
+| toggle overlay | `⌃⇧⌥K` |
+| prev / next layer | `k` / `j` (or `h` / `l`, or click a tab) |
+| resize | `⌃⇧⌥L` |
+| load another keymap (session only) | `⌃⇧⌥O` |
+| close | `Esc` |
 
-| action | keys |
-|--------|------|
-| **Show / hide** overlay | `⌃⇧⌥K` (Ctrl+Shift+Alt+K) |
-| **Enlarge / shrink** (while shown) | `⌃⇧⌥L` |
-| **Close** | `Esc` |
-| **Prev / next layer** | `k` / `j` (also `h` / `l`, Helix-style), or click a layer tab |
-| Load a **different keymap** | click *load keymap…* in the footer |
-
-Both halves are shown at once, centered, so you can glance at them while typing.
-Change the hotkey or sizes by editing the constants at the top of
-`~/.hammerspoon/init.lua` (then *Reload Config*).
-
-### How keys are rendered
-- `&kp` keys show readable glyphs, including shifted symbols (`LS(N4)`→`$`, `LS(COMMA)`→`<`).
-- Modifiers as symbols: `⌘ ⌥ ⌃ ⇧`; combos like `LG(LS(N4))`→`⌘⇧4`.
-- **Mod-tap** `&mt`: big tap key + small mod badge (top-right, orange).
-- **Layer-tap** `&lt` / layer holds (`&mo`, your custom `&layer_access`): purple `L<n>`
-  with a `hold`/`sticky` note.
-- `&sk` sticky mods are outlined green; `&to`/`&tog` show `→L<n>`/`⇄L<n>`.
-- `&trans` shows **what's underneath** — the key from the Base layer, faded with a dashed
-  border (so you see the effective key without it being remapped on this layer).
-- `&none` (mapped to nothing) is a blank key with a single diagonal slash.
-- `&magic`, `&bt`/`&out`/`&rgb_ug`, `&reset`/`&bootloader`, and your `&tmux_*` macros get
-  sensible labels. Anything unrecognized shows its raw token (never crashes).
-
-Your `&colon_semi` mod-morph renders as `:` (with `;` shown as its shifted form).
-
-## Re-exporting your keymap later
-
-1. Open your layout at **my.glove80.com** (Layout Editor).
-2. Export / download the **JSON** for the layout.
-3. Either:
-   - **Quick swap (no rebuild):** click *load keymap…* in the overlay footer and pick the
-     new JSON. (Lasts for that session.)
-   - **Make it the default:** re-run the embed step so the new keymap is baked into the
-     HTML:
-     ```sh
-     cd ~/Desktop/programming/git/keekee
-     python3 build.py /path/to/new-export.json   # see below
-     cp glove80.html ~/.hammerspoon/glove80.html
-     ```
-     Then Hammerspoon menu → **Reload Config** (the overlay reloads the file on every show,
-     so usually just re-summoning it is enough).
-
-The viewer assumes the standard Glove80 80-key physical layout, so any Glove80 Layout
-Editor export will map onto the same board shape.
+Window position and selected layer are remembered between opens.
 
 ## Notes
-- Everything is local — the HTML makes **no external requests**.
-- The overlay is *non-activating*: it floats over your current app without stealing focus,
-  so it won't interrupt typing.
+
+- Re-export after editing your layout → re-run step 2–3 (overlay reloads on each open).
+- Edit the hotkey/sizes at the top of `init.snippet.lua` (the `g80` table).
+- Handles `&kp` (incl. shifted symbols), mods, mod/layer-taps, sticky, `&magic`, macros,
+  etc. `&trans` shows the underlying Base key (faded); `&none` shows a slash; unknown
+  behaviors show their raw token.
