@@ -112,22 +112,22 @@ const LAYOUT = (() => {
     [2,12,24,36,48,66],   // col2
     [3,13,25,37,49,67],   // col3
     [4,14,26,38,50,68],   // col4
-    [null,21,27,39,51,null], // col5 (inner index): (blank) T G B
+    [null,15,27,39,51,null], // col5 (inner index): (blank) T G B
   ];
   L.forEach((colArr,c)=>colArr.forEach((idx,r)=>{ if(idx!==null) put('L',c,r,idx); }));
   // thumb cluster: 6 keys -> top row [0,1,2], bottom row [3,4,5]
-  [20,52,53,69,70,71].forEach((idx,ti)=>thumb('L',ti,idx)); // bottom: 69=BSPC 70=LGUI
+  [52,53,54,69,70,71].forEach((idx,ti)=>thumb('L',ti,idx)); // top: 52=CAPS  bottom: 69=BSPC 70=LGUI
   // RIGHT finger columns
   const R = [
-    [null,56,28,40,58,null], // col0 (inner index): (blank) Y H N
+    [null,16,28,40,58,null], // col0 (inner index): (blank) Y H N
     [5,17,29,41,59,75],
     [6,18,30,42,60,76],
     [7,19,31,43,61,77],
-    [8,16,32,44,62,78],
-    [9,15,33,45,63,79],        // col5 (outer pinky)
+    [8,20,32,44,62,78],
+    [9,21,33,45,63,79],        // col5 (outer pinky)
   ];
   R.forEach((colArr,c)=>colArr.forEach((idx,r)=>{ if(idx!==null) put('R',c,r,idx); }));
-  [57,54,55,72,73,74].forEach((idx,ti)=>thumb('R',ti,idx)); // bottom: 73=RET 74=SPACE
+  [55,56,57,72,73,74].forEach((idx,ti)=>thumb('R',ti,idx)); // top: 57=caps_word  bottom: 73=RET 74=SPACE
   return m;
 })();
 // per-column vertical stagger (key units, +down). Main finger block stays flat
@@ -185,16 +185,17 @@ function glyph(code){
 }
 
 // format a &kp parameter, which may be a modifier-function nest e.g. LS(N4)
-function fmtParam(p){
+function fmtParam(p, top=true){
   if(p && p.params && p.params.length){
     const fn = p.value, inner = p.params[0];
     const innerCode = inner && inner.params && inner.params.length ? null : (inner ? inner.value : null);
-    // single shift over a key with a defined shifted symbol -> show that symbol
-    if((fn==='LS'||fn==='RS'||fn==='LSHFT'||fn==='RSHFT') && innerCode && SHIFTED[innerCode]!==undefined){
+    // lone shift over a key with a defined shifted symbol -> show that symbol (e.g. LS(N4)->$).
+    // only when shift is the outermost modifier; under ⌘/⌃/⌥ show ⇧+key (e.g. LG(LS(N4))->⌘⇧4).
+    if(top && (fn==='LS'||fn==='RS'||fn==='LSHFT'||fn==='RSHFT') && innerCode && SHIFTED[innerCode]!==undefined){
       return SHIFTED[innerCode];
     }
     const mg = MOD[fn]!==undefined ? MOD[fn] : fn+'+';
-    return mg + fmtParam(inner);
+    return mg + fmtParam(inner, false);
   }
   return glyph(p ? p.value : '');
 }
