@@ -55,6 +55,8 @@
   .key.kind-sticky .main{color:var(--accent2)}
   .key.kind-magic .main{color:var(--accent2)}
   .key.kind-sys .main{color:var(--badge)}
+  /* caps_word: same ⇪ glyph as caps lock, but yellow to tell them apart */
+  .key.kind-capsword .main{color:#e3b341}
   /* &trans -> resolved to the key on the layer underneath, shown faded + dashed */
   .key.inherited{opacity:0.5; border-style:dashed}
   /* &none -> blank: a single diagonal slash through the key */
@@ -226,6 +228,7 @@ function decode(b, ctx){
     case '&sl':    return {main:'L'+p0, sub2:'sticky', kind:'sticky'};
     case '&sk':    return {main:MOD[p0]||glyph(p0), sub2:'sticky', kind:'sticky'};
     case '&magic': return {main:'Magic', kind:'magic'};
+    case '&caps_word': return {main:'⇪', kind:'capsword'};
     case '&layer_access': { // custom: mo(p0)/sl(p1)
       const hold=p0, stick=P[1]?P[1].value:p0;
       return {main:'L'+hold, sub2:(hold===stick?'hold·stick':'hold '+hold), kind:'layer'};
