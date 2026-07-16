@@ -207,8 +207,15 @@ const CUSTOM = {
   '&colon_semi': {main:':', sub2:';', kind:'custom'},
   '&magic':      {main:'Magic', kind:'magic'},
 };
+// special-case labels that don't shorten well from the raw name
+const MACRO_LABEL = {
+  tmux_one_two_thirds_toggle: '⅓ ⅔',
+  tmux_rename: 'name',
+};
 function macroLabel(name){
-  return String(name).replace(/^&/,'').replace(/^tmux_/,'tmux ').replace(/_/g,' ');
+  const key = String(name).replace(/^&/,'');
+  if(MACRO_LABEL[key]) return MACRO_LABEL[key];
+  return key.replace(/^tmux_/,'').replace(/_/g,' ').replace(/\bwindow\b/g,'win');
 }
 
 /* ---------- behavior -> display object {main, sub, sub2, kind} ---------- */
